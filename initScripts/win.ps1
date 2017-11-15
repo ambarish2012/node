@@ -20,11 +20,128 @@ $REQPROC_OPTS=""
 $REQPROC_CONTAINER_NAME_PATTERN="reqProc"
 $REQPROC_CONTAINER_NAME="$REQPROC_CONTAINER_NAME_PATTERN-$BASE_UUID"
 $REQKICK_SERVICE_NAME_PATTERN="shippable-reqKick@"
-$LEGACY_CI_CACHE_STORE_LOCATION="c:\shippable\legacy\cache"
-$LEGACY_CI_KEY_STORE_LOCATION="$env:TMP\ssh"
-$LEGACY_CI_MESSAGE_STORE_LOCATION="$env:TMP\cexec"
-$LEGACY_CI_BUILD_LOCATION="c:\shippable\legacy\build"
-$LEGACY_CI_CEXEC_LOCATION_ON_HOST="c:\shippable\legacy\cexec"
-$LEGACY_CI_DOCKER_CLIENT_LATEST="\opt\docker\docker"
-$DEFAULT_TASK_CONTAINER_MOUNTS="-v ${BUILD_DIR:$BUILD_DIR} -v ${REQEXEC_DIR}:\reqExec"
-$DEFAULT_TASK_CONTAINER_OPTIONS="--rm"
+$SHIPPABLE_AMQP_URL="amqps://metuvanahaqawiho:3CkPTAFgclMa6qIj@msg.shippable.com:5671/shippable"
+$SHIPPABLE_API_URL="https://api.shippable.com"
+$LISTEN_QUEUE="58b5dd45ddd8e8070045dab1.exec"
+$NODE_ID="5a04a3542ff69c0700fabe0b"
+$RUN_MODE="production"
+$COMPONENT="genExec"
+$SHIPPABLE_AMQP_DEFAULT_EXCHANGE="shippableEx"
+$SUBSCRIPTION_ID="58b5dd45ddd8e8070045dab1"
+$NODE_TYPE_CODE="7000"
+$DOCKER_CLIENT_LATEST=""
+$EXEC_IMAGE="drydock/genexec:v5.10.4"
+$DOCKER_VERSION="17.09.0-ce"
+$NODE_ARCHITECTURE="x86_64"
+
+Function install_nodejs {
+	echo "Installing node"
+	$install_node_js_cmd = "choco install -y nodejs.install"
+	iex $install_node_js_cmd
+	iex "RefreshEnv"
+
+	#$check_node_version_cmd = '"$env:ProgramW6432\nodejs\node.exe" "-v"'
+	$check_node_version_cmd = "node -v"
+	# iex "& $check_node_version_cmd"
+	iex $check_node_version_cmd
+}
+
+Function install_nodepackages {
+	echo "Installing prerequisite packages"
+	$install_pm2_package_cmd = "npm install pm2 -g"
+	iex $install_pm2_package_cmd
+	iex "pm2 update"
+
+	# pm2-windows-startup
+	$install_pm2_startup_package_cmd = "npm install pm2-windows-startup -g"
+	iex $install_pm2_startup_package_cmd
+	$run_pm2_startup_cmd = "pm2-startup install"
+	iex $run_pm2_startup_cmd
+}
+
+Function docker_install() {
+	echo "Installing docker"
+
+	$url = "https://download.docker.com/win/stable/InstallDocker.msi"
+	$output = "$PSScriptRoot/InstallDocker.msi"
+	
+	$wc = New-Object System.Net.WebClient
+	$wc.DownloadFile($url, $output)
+
+	$arguments= ' /qn /l*v .\install_docker.log' 
+	Start-Process `
+		 -file  $output `
+		 -arg $arguments `
+		 -passthru | wait-process
+
+	$docker = "$env:ProgramW6432\Docker\Docker\Docker for Windows.exe"
+	$process = Start-Process -file  $docker -PassThru
+
+	echo "Waiting for docker daemon to start"
+	# wait for a few seconds for Docker to Start 
+	Do {
+		Start-Sleep -s 1
+		& "docker" ps > out.txt 2>&1
+	}
+	While ($LastExitCode -eq 1)
+
+	# Output docker version
+	& "docker" -v
+}
+
+Function setup_envs() {
+  $REQPROC_ENVS="$REQPROC_ENVS \
+    -e SHIPPABLE_AMQP_URL=$SHIPPABLE_AMQP_URL \
+    -e SHIPPABLE_AMQP_DEFAULT_EXCHANGE=$SHIPPABLE_AMQP_DEFAULT_EXCHANGE \
+    -e SHIPPABLE_API_URL=$SHIPPABLE_API_URL \
+    -e LISTEN_QUEUE=$LISTEN_QUEUE \
+    -e NODE_ID=$NODE_ID \
+    -e RUN_MODE=$RUN_MODE \
+    -e SUBSCRIPTION_ID=$SUBSCRIPTION_ID \
+    -e NODE_TYPE_CODE=$NODE_TYPE_CODE \
+    -e BASE_DIR=$BASE_DIR \
+    -e REQPROC_DIR=$REQPROC_DIR \
+    -e REQEXEC_DIR=$REQEXEC_DIR \
+    -e REQEXEC_BIN_DIR=$REQEXEC_BIN_DIR \
+    -e REQKICK_DIR=$REQKICK_DIR \
+    -e BUILD_DIR=$BUILD_DIR \
+    -e REQPROC_CONTAINER_NAME=$REQPROC_CONTAINER_NAME \
+    -e DEFAULT_TASK_CONTAINER_OPTIONS='$DEFAULT_TASK_CONTAINER_OPTIONS' \
+    -e EXEC_IMAGE=$EXEC_IMAGE \
+    -e DOCKER_CLIENT_LATEST=$DOCKER_CLIENT_LATEST \
+    -e SHIPPABLE_DOCKER_VERSION=$DOCKER_VERSION \
+    -e IS_DOCKER_LEGACY=false \
+    -e SHIPPABLE_NODE_ARCHITECTURE=$NODE_ARCHITECTURE"
+}
+
+Function boot_reqKick() {
+	echo "Booting up reqKick service..."
+	
+	iex "git clone https://github.com/Shippable/reqKick.git $REQKICK_DIR"
+	iex "pushd $REQKICK_DIR"
+	iex "npm install"
+	
+	[Environment]::SetEnvironmentVariable("STATUS_DIR", "$STATUS_DIR", "User")
+	[Environment]::SetEnvironmentVariable("SCRIPTS_DIR", "$SCRIPTS_DIR", "User")
+	[Environment]::SetEnvironmentVariable("REQEXEC_BIN_PATH", "$REQEXEC_BIN_PATH", "User")
+	iex "RefreshEnv"
+
+	iex "pm2 start reqKick.app.js"
+	iex "pm2 save"
+	
+	iex "popd"
+}
+
+remove_reqKick() {
+	$remove_reqKick__cmd = "pm2 delete all"
+	iex $run_pm2_startup_cmd
+}
+
+
+install_nodejs
+install_nodepackages
+docker_install
+setup_envs
+remove_reqKick
+boot_reqKick
+
