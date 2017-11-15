@@ -1,6 +1,5 @@
 $DOCKER_VERSION="17.06.0"
 $docker_restart=$false
-
 $SHIPPABLE_RUNTIME_DIR="c:\shippable"
 $BASE_UUID=New-Guid
 $BASE_DIR="$SHIPPABLE_RUNTIME_DIR\$BASE_UUID"
@@ -143,12 +142,20 @@ Function boot_reqKick() {
 	iex "pushd $REQKICK_DIR"
 	iex "npm install"
 	
-	[Environment]::SetEnvironmentVariable("STATUS_DIR", "$STATUS_DIR", "User")
-	[Environment]::SetEnvironmentVariable("SCRIPTS_DIR", "$SCRIPTS_DIR", "User")
-	[Environment]::SetEnvironmentVariable("REQEXEC_BIN_PATH", "$REQEXEC_BIN_PATH", "User")
+	[Environment]::SetEnvironmentVariable("STATUS_DIR", "$STATUS_DIR", "Machine")
+	[Environment]::SetEnvironmentVariable("SCRIPTS_DIR", "$SCRIPTS_DIR", "Machine")
+	[Environment]::SetEnvironmentVariable("REQEXEC_BIN_PATH", "c:\Users\ambarish\Desktop\shippable\reqExec\dist\main.exe", "Machine")
 	iex "RefreshEnv"
 
+	# We also need to set Environment variables for launching reqKick from within powershell
+	# On Reboot the systemt Environment variables will take effect
+	$env:STATUS_DIR="$STATUS_DIR"
+	$env:SCRIPTS_DIR="$SCRIPTS_DIR"
+	$env:REQEXEC_BIN_PATH="c:\Users\ambarish\Desktop\shippable\reqExec\dist\main.exe"
+	
 	iex "pm2 start reqKick.app.js"
+	iex "pm2 list"
+	iex "pm2 show 0"
 	iex "pm2 save"
 	
 	iex "popd"
