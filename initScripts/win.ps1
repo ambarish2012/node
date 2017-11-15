@@ -59,12 +59,22 @@ Function install_nodepackages {
 	iex $run_pm2_startup_cmd
 }
 
+Function is_installed( $program ) {
+	$x86 = ((Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall") |
+        Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } ).Length -gt 0;
+
+    $x64 = ((Get-ChildItem "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall") |
+        Where-Object { $_.GetValue( "DisplayName" ) -like "*$program*" } ).Length -gt 0;
+
+    return $x86 -or $x64;
+}
+
 Function docker_install() {
 	echo "Installing docker"
 
 	$url = "https://download.docker.com/win/stable/InstallDocker.msi"
 	$output = "$PSScriptRoot/InstallDocker.msi"
-	
+	 
 	$wc = New-Object System.Net.WebClient
 	$wc.DownloadFile($url, $output)
 
@@ -90,29 +100,41 @@ Function docker_install() {
 }
 
 Function setup_envs() {
-  $REQPROC_ENVS="$REQPROC_ENVS \
-    -e SHIPPABLE_AMQP_URL=$SHIPPABLE_AMQP_URL \
-    -e SHIPPABLE_AMQP_DEFAULT_EXCHANGE=$SHIPPABLE_AMQP_DEFAULT_EXCHANGE \
-    -e SHIPPABLE_API_URL=$SHIPPABLE_API_URL \
-    -e LISTEN_QUEUE=$LISTEN_QUEUE \
-    -e NODE_ID=$NODE_ID \
-    -e RUN_MODE=$RUN_MODE \
-    -e SUBSCRIPTION_ID=$SUBSCRIPTION_ID \
-    -e NODE_TYPE_CODE=$NODE_TYPE_CODE \
-    -e BASE_DIR=$BASE_DIR \
-    -e REQPROC_DIR=$REQPROC_DIR \
-    -e REQEXEC_DIR=$REQEXEC_DIR \
-    -e REQEXEC_BIN_DIR=$REQEXEC_BIN_DIR \
-    -e REQKICK_DIR=$REQKICK_DIR \
-    -e BUILD_DIR=$BUILD_DIR \
-    -e REQPROC_CONTAINER_NAME=$REQPROC_CONTAINER_NAME \
-    -e DEFAULT_TASK_CONTAINER_OPTIONS='$DEFAULT_TASK_CONTAINER_OPTIONS' \
-    -e EXEC_IMAGE=$EXEC_IMAGE \
-    -e DOCKER_CLIENT_LATEST=$DOCKER_CLIENT_LATEST \
-    -e SHIPPABLE_DOCKER_VERSION=$DOCKER_VERSION \
-    -e IS_DOCKER_LEGACY=false \
+  $REQPROC_ENVS="$REQPROC_ENVS `
+    -e SHIPPABLE_AMQP_URL=$SHIPPABLE_AMQP_URL `
+    -e SHIPPABLE_AMQP_DEFAULT_EXCHANGE=$SHIPPABLE_AMQP_DEFAULT_EXCHANGE `
+    -e SHIPPABLE_API_URL=$SHIPPABLE_API_URL `
+    -e LISTEN_QUEUE=$LISTEN_QUEUE `
+    -e NODE_ID=$NODE_ID `
+    -e RUN_MODE=$RUN_MODE `
+    -e SUBSCRIPTION_ID=$SUBSCRIPTION_ID `
+    -e NODE_TYPE_CODE=$NODE_TYPE_CODE `
+    -e BASE_DIR=$BASE_DIR `
+    -e REQPROC_DIR=$REQPROC_DIR `
+    -e REQEXEC_DIR=$REQEXEC_DIR `
+    -e REQEXEC_BIN_DIR=$REQEXEC_BIN_DIR `
+    -e REQKICK_DIR=$REQKICK_DIR `
+    -e BUILD_DIR=$BUILD_DIR `
+    -e REQPROC_CONTAINER_NAME=$REQPROC_CONTAINER_NAME `
+    -e DEFAULT_TASK_CONTAINER_OPTIONS='$DEFAULT_TASK_CONTAINER_OPTIONS' `
+    -e EXEC_IMAGE=$EXEC_IMAGE `
+    -e DOCKER_CLIENT_LATEST=$DOCKER_CLIENT_LATEST `
+    -e SHIPPABLE_DOCKER_VERSION=$DOCKER_VERSION `
+    -e IS_DOCKER_LEGACY=false `
     -e SHIPPABLE_NODE_ARCHITECTURE=$NODE_ARCHITECTURE"
+
+	echo $REQPROC_ENVS
 }
+
+Function setup_directories() {
+	Remove-Item $SHIPPABLE_RUNTIME_DIR -Force -Recurse
+	iex "mkdir -p $BASE_DIR"
+	iex "mkdir -p $REQPROC_DIR"
+	iex "mkdir -p $REQEXEC_DIR"
+	iex "mkdir -p $REQEXEC_BIN_DIR"
+	iex "mkdir -p $REQKICK_DIR"
+	iex "mkdir -p $BUILD_DIR"
+ }
 
 Function boot_reqKick() {
 	echo "Booting up reqKick service..."
@@ -132,16 +154,23 @@ Function boot_reqKick() {
 	iex "popd"
 }
 
-remove_reqKick() {
-	$remove_reqKick__cmd = "pm2 delete all"
-	iex $run_pm2_startup_cmd
+Function remove_reqKick() {
+	$remove_reqKick_cmd = "pm2 delete all"
+	iex $remove_reqKick_cmd
 }
 
-
+<#
 install_nodejs
 install_nodepackages
-docker_install
+
+$docker_installed = is_installed docker
+If ($docker_installed -eq $False) {
+	docker_install
+}
+#>
+
 setup_envs
+setup_directories
 remove_reqKick
 boot_reqKick
 
