@@ -166,7 +166,7 @@ Function remove_reqKick() {
 	iex $remove_reqKick_cmd
 }
 
-<#
+
 install_nodejs
 install_nodepackages
 
@@ -174,7 +174,6 @@ $docker_installed = is_installed docker
 If ($docker_installed -eq $False) {
 	docker_install
 }
-#>
 
 setup_envs
 setup_directories
